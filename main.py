@@ -1,12 +1,21 @@
 import os
 from dotenv import load_dotenv
+import datetime
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy import (
     create_engine,
     Column,
     Integer,
     String,
-    ForeignKey
+    ForeignKey,
+    Select,
+    VARCHAR,
+    BOOLEAN,
+    FLOAT,
+    DATE,
+    TEXT,
+    func,
+    desc,
 )
 
 load_dotenv()
@@ -26,6 +35,7 @@ engine = create_engine(
 Base = declarative_base()
 
 
+# Task 1
 class Student(Base):
     __tablename__ = 'student'
 
@@ -73,7 +83,7 @@ subjects = [
 
 students_subjects = [
     StudentSubject(student_id=1,
-                   subject_id=1,
+                   subject_id=1,  # English
                    score=5),
     StudentSubject(student_id=1,
                    subject_id=2,
@@ -106,7 +116,7 @@ students_subjects = [
                    subject_id=4,
                    score=2),
     StudentSubject(student_id=4,
-                   subject_id=1,
+                   subject_id=1,  # English
                    score=5),
     StudentSubject(student_id=4,
                    subject_id=2,
@@ -115,6 +125,7 @@ students_subjects = [
                    subject_id=3,
                    score=4),
 ]
+
 
 # For testing purpose
 Base.metadata.drop_all(engine)
@@ -145,7 +156,7 @@ print(session.query(StudentSubject.student_id,
                     StudentSubject.subject_id,
                     StudentSubject.score).all())
 
-
+# Task 2
 checked_subject_name = 'English'
 
 subject_id = (
@@ -154,15 +165,12 @@ subject_id = (
     .filter(Subject.name == checked_subject_name)
     .first()
 )[0]
-print(subject_id)
 
 subject_students = (
     session
     .query(StudentSubject.student_id)
     .filter(StudentSubject.subject_id == subject_id)
 )
-
-print(subject_students.all())
 
 students_names = (
     session
@@ -171,3 +179,105 @@ students_names = (
 )
 
 print(students_names.all())
+
+
+# Task 3
+# Sub-task defining tables
+class Users(Base):
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True)
+    nickname = Column(VARCHAR(64), nullable=False)
+    user_type = Column(VARCHAR(10), nullable=False)
+
+
+class Rooms(Base):
+    __tablename__ = 'rooms'
+
+    id = Column(Integer, primary_key=True)
+    host_id = Column(ForeignKey('users.id'))
+    beds = Column(Integer, nullable=False)
+    air_conditionind = Column(BOOLEAN)
+    price = Column(FLOAT, nullable=False)
+
+
+class Reservations(Base):
+    __tablename__ = 'reservations'
+
+    user_id = Column(ForeignKey('users.id'), primary_key=True)
+    room_id = Column(ForeignKey('rooms.id'), primary_key=True)
+    settling = Column(DATE, nullable=False, primary_key=True)
+    departure = Column(DATE, nullable=False)
+    paid = Column(FLOAT, nullable=False)
+
+
+class Reviews(Base):
+    __tablename__ = 'reviews'
+
+    host_id = Column(ForeignKey('users.id'), primary_key=True)
+    guest_id = Column(ForeignKey('users.id'), primary_key=True)
+    rate = Column(FLOAT, nullable=False)
+    text = Column(TEXT)
+
+
+# Sub-task
+# Finding user with max amount of reservations
+max_reservations_user_id = (
+    session
+    .query(Reservations.user_id)
+    .group_by(Reservations.user_id)
+    .order_by(desc(func.count(Reservations.user_id)))
+).first()
+
+user_nickname_and_id = (
+    session
+    .query(Users.nickname, Users.id)
+    .filter(Users.id == max_reservations_user_id[0])
+).first()
+
+print(user_nickname_and_id)
+
+# Sub-task
+# Findig best rated host
+best_rated_host_id = (
+    session
+    .query(Reviews.host_id)
+    .group_by(Reviews.host_id)
+    .order_by(desc(func.avg(Reviews.rate)))
+).first()
+
+host_nickname_and_id = (
+    session
+    .query(Users.nickname, Users.id)
+    .filter(Users.id == best_rated_host_id[0])
+).first()
+
+print(host_nickname_and_id)
+
+# Sub-task
+# Finding max income during last month
+date_to = datetime.date.today().replace(day=1) - datetime.timedelta(days=1)
+date_from = date_to.replace(day=1)
+
+max_income_last_month_host_id = (
+    session
+    .query(
+        Users.id
+    )
+    .filter(Reservations.room_id == Rooms.id)
+    .filter(Rooms.host_id == Users.id)
+    .filter(
+        Reservations.settling >= date_from)
+    .filter(
+        Reservations.settling <= date_to)
+    .group_by(Users.id, Reservations.paid)
+    .order_by(desc(Reservations.paid))
+).first()
+
+max_income_host_nickname_and_id = (
+    session
+    .query(Users.nickname, Users.id)
+    .filter(Users.id == max_income_last_month_host_id[0])
+).first()
+
+print(host_nickname_and_id)
